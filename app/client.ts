@@ -16,7 +16,25 @@ const POOL_ID = 1;
 const program = anchor.workspace
   .StakingPoolManager as anchor.Program<StakingPoolManager>;
 
+const [stateAddress] = PublicKey.findProgramAddressSync(
+  [Buffer.from("state")],
+  program.programId
+);
+
 const createPool = async () => {
+  try {
+    await program.methods
+      .initializeState()
+      .accounts({
+        state: stateAddress,
+        authority: wallet.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .signers([wallet.payer])
+      .rpc();
+  } catch (e) {
+    throw new Error(`Error initializing state: ${e}`);
+  }
   console.log(`Finding pool...`);
   let [poolAccountAddress] = anchor.web3.PublicKey.findProgramAddressSync(
     [
@@ -33,23 +51,27 @@ const createPool = async () => {
       `Pool already exists, id: ${poolAccount.id}, accountAddress: ${poolAccountAddress}`
     );
   } catch {
-    let tx = await program.methods
-      .createPool(
-        new anchor.BN(POOL_ID),
-        new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU")
-      )
-      .accounts({
-        authority: program.provider.publicKey,
-        pool: poolAccountAddress,
-        systemProgram: SystemProgram.programId,
-      })
-      .signers([wallet.payer])
-      .rpc();
-    console.log(
-      `Created new pool id: ${POOL_ID}, accountAddress: ${poolAccountAddress}`
-    );
+    try {
+      let tx = await program.methods
+        .createPool(
+          new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU")
+        )
+        .accounts({
+          authority: program.provider.publicKey,
+          pool: poolAccountAddress,
+          state: stateAddress,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([wallet.payer])
+        .rpc();
+      console.log(
+        `Created new pool id: ${POOL_ID}, accountAddress: ${poolAccountAddress}`
+      );
+    } catch (e) {
+      console.log(`Error creating pool: ${e}`);
+    }
+    return poolAccountAddress;
   }
-  return poolAccountAddress;
 };
 const main = async () => {
   createPool();
